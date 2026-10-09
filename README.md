@@ -53,7 +53,7 @@ More folders (`infra/terraform`, `src`, `pipelines`, `tests`, `.github/workflows
 ## Getting started (current state)
 
 ```bash
-git clone https://github.com/<your-username>/credit-risk-platform.git
+git clone https://github.com/Sudheesh901/credit-risk-platform.git
 cd credit-risk-platform
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
