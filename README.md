@@ -71,6 +71,8 @@ python ingest/to_parquet.py        # build the bronze layer in data/bronze
 python ingest/profile_bronze.py    # profile values, placeholders and join integrity
 python ingest/build_silver.py      # silver layer: typed features and default labels
 python ingest/diagnose_default_timing.py   # timing check behind the label fix
+python ingest/check_quality.py     # 25 automated data-quality checks (exit code 1 on failure)
+python ingest/diagnose_quality_failures.py   # drill-down used to investigate check failures
 ```
 
 ## Tech stack

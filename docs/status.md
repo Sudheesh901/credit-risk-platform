@@ -4,7 +4,7 @@ _Last updated: 2026-10-09 (about day 3 of a 6-week plan)._
 
 ## Summary
 
-Setup is complete, the bronze layer is built and profiled, and the silver layer now holds cleaned origination features and a validated 24-month default label. The next work is automated data-quality checks, then loading the data into S3 and Athena to finish Week 1.
+Setup is complete, the bronze layer is built and profiled, and the silver layer now holds cleaned origination features and a validated 24-month default label. Twenty-five automated data-quality checks pass on the silver layer. The next work is loading the data into S3 and Athena to finish Week 1.
 
 ## Done
 
@@ -19,6 +19,8 @@ Setup is complete, the bronze layer is built and profiled, and the silver layer 
 - [x] Profiled the bronze data (`ingest/profile_bronze.py`)
 - [x] Built the silver layer: typed columns, placeholders turned into missing values, unusable column dropped (`ingest/build_silver.py`)
 - [x] Found and fixed a calendar effect in the first default label (`ingest/diagnose_default_timing.py`)
+- [x] Wrote automated data-quality checks for the silver layer; all 25 pass (`ingest/check_quality.py`)
+- [x] Diagnosed the first check failures and corrected the rules (`ingest/diagnose_quality_failures.py`)
 
 ## Data profiling findings (2013-2022 samples)
 
@@ -60,18 +62,28 @@ A timing check showed those defaults were concentrated in calendar 2020 (1,083 f
 - Total adjusted defaults: 3,538 of 500,000 loans (0.71%). By split: about 1,202 in training years 2013-2016, 415 in validation 2017, 371 in the 2018 out-of-time test. These counts are thin, so test metrics on the samples will be noisy until full vintage files are used.
 - **Known limitation:** a loan that entered forbearance and truly failed later, or while flagged, is labelled non-default. This will be documented in the model card.
 
+## Data-quality findings
+
+The first run of the checks passed 18 of 22 rules. The four failures were investigated rather than silenced:
+
+- **270 loans with only a month-0 record:** each has a single performance row, and almost all (263) ended immediately as prepaid or matured. They are valid, so the rule was changed to require that such loans stay rare (0.054% now).
+- **LTV above 105 (and CLTV above 200):** every such loan is a HARP refinance (4,728 loans in the samples, LTV up to 528). HARP had no LTV cap. Non-HARP loans never exceed LTV 105 or CLTV 200, and the checks now test HARP and non-HARP loans separately.
+- **One HARP loan with CLTV above 700:** left visible in the check output (at most 5 allowed) and to be capped during feature engineering rather than deleted.
+- **69 loans with a first payment more than a year from the vintage (0.014%):** dates are internally consistent, so these are unusual loans; a small tolerance is allowed.
+
 ## Decisions so far
 
 - Bronze layer is kept as raw text; typing and cleaning happen in the silver layer.
 - Data is partitioned Hive-style by `vintage_year` so Athena can read it directly.
 - Default label: flag-adjusted 24-month definition (see above), with the raw version kept for comparison.
 - Split by origination year: train 2013-2016, validate 2017, out-of-time test 2018, 2019 spare, replay and drift stream 2020-2022.
+- HARP refinance loans (the only loans with LTV above 105) are kept and flagged for now. Week 2 decides whether to model them separately, exclude them, or keep them with the flag.
+- Extreme LTV and CLTV values are handled by capping at a high percentile during feature engineering, not by deleting loans.
 
 ## Next steps
 
-1. Automated data-quality checks on the silver layer
-2. Upload to S3 and create Athena tables (Week 1 definition of done: an Athena query returns the default rate by vintage)
-3. Week 2: feature engineering, scorecard vs LightGBM, calibration, SHAP
+1. Upload to S3 and create Athena tables (Week 1 definition of done: an Athena query returns the default rate by vintage)
+2. Week 2: feature engineering (including the HARP decision and capping extreme values), scorecard vs LightGBM, calibration, SHAP
 
 ## Open items and risks
 
@@ -79,3 +91,4 @@ A timing check showed those defaults were concentrated in calendar 2020 (1,083 f
 - Upgrade the AWS account to the Paid plan before Week 3 (SageMaker), and check the credits balance weekly
 - Thin default counts in the samples: plan to retrain on full vintage files
 - Investigate why the 2022 vintage has higher defaults
+- Decide how to treat HARP loans in modelling (Week 2)
