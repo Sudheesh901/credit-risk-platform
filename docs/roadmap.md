@@ -26,8 +26,8 @@ Build and deploy an end-to-end credit risk platform on AWS using the Freddie Mac
 ## Modelling design
 
 - **Unit of analysis:** one row per loan, features from origination data.
-- **Default label (draft, to be confirmed against the User Guide):** within 24 months of origination the loan reaches 90+ days delinquent, becomes real-estate-owned, or ends with a credit-event zero-balance code (`02`, `03`, `09`, `15`). Prepaid loans are labelled non-default.
-- **Splits by origination year:** train 2013-2016, validation 2017, out-of-time test 2018, 2019 spare, replay and drift stream 2020-2022.
+- **Default label (adopted):** within 24 months of origination the loan ends with a credit-event zero-balance code (`02`, `03`, `09`, `15`), is acquired as real-estate-owned, or reaches 90+ days delinquent while not in forbearance and not flagged as disaster-related. The first version ignored those flags and was inflated for the 2018 and 2019 vintages by pandemic forbearance (see [status.md](status.md)), so the raw version is kept as `default_24m_raw` for comparison. Prepaid loans are labelled non-default.
+- **Splits by origination year:** train 2013-2016, validation 2017, out-of-time test 2018, 2019 spare, replay and drift stream 2020-2022. On the 50,000-loan samples the adjusted defaults are about 1,200 (train), 415 (validation) and 371 (test), so sample metrics are noisy and the final model is retrained on full vintages. The 2022 vintage shows genuinely higher defaults and is the natural drift scenario for the monitoring demo.
 - **Models:** weight-of-evidence logistic scorecard as the benchmark, LightGBM with monotonic constraints as the challenger.
 - **Evaluation:** AUC, KS, Gini, Brier score, calibration curve, stability across vintages, cost-based approval threshold.
 - **Explainability:** SHAP reason codes per decision, Clarify reports.

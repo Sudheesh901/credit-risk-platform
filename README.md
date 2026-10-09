@@ -69,6 +69,8 @@ python ingest/inspect_files.py     # list files and peek at their contents
 python ingest/show_headers.py      # print column lists and check library versions
 python ingest/to_parquet.py        # build the bronze layer in data/bronze
 python ingest/profile_bronze.py    # profile values, placeholders and join integrity
+python ingest/build_silver.py      # silver layer: typed features and default labels
+python ingest/diagnose_default_timing.py   # timing check behind the label fix
 ```
 
 ## Tech stack

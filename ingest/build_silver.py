@@ -1,9 +1,12 @@
+import shutil
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
 pd.set_option("display.width", 200)
+
+shutil.rmtree("data/silver", ignore_errors=True)
 Path("data/silver").mkdir(parents=True, exist_ok=True)
 
 con = duckdb.connect()
@@ -16,27 +19,34 @@ con.execute(
     "read_parquet('data/bronze/perf/*/*.parquet', hive_partitioning=true)"
 )
 
-# A loan-month counts as a default event if it falls in the first 24 months
-# and the loan is 90+ days delinquent, real-estate-owned, or ended in a credit event.
-EVENT = """(
-    TRY_CAST(loan_age AS INTEGER) <= 24
-    AND (
-        TRY_CAST(dq_status AS INTEGER) >= 3
-        OR dq_status = 'RA'
-        OR zero_bal_code IN ('02', '03', '09', '15')
-    )
-)"""
+IN_WINDOW = "TRY_CAST(loan_age AS INTEGER) <= 24"
+CREDIT_END = "zero_bal_code IN ('02', '03', '09', '15')"
+SEVERE_DQ = "(TRY_CAST(dq_status AS INTEGER) >= 3 OR dq_status = 'RA')"
+RELIEF = "(borrower_assistance_plan = 'F' OR delinquency_due_to_disaster = 'Y')"
+
+# Raw label: any 90+ day delinquency, REO, or credit-event ending in the first 24 months.
+RAW_EVENT = f"({IN_WINDOW} AND ({SEVERE_DQ} OR {CREDIT_END}))"
+
+# Adjusted label: 90+ day delinquency does not count while the loan is in
+# forbearance or flagged as disaster-related. Credit-event endings and REO always count.
+ADJ_EVENT = f"""({IN_WINDOW} AND (
+    {CREDIT_END}
+    OR dq_status = 'RA'
+    OR (TRY_CAST(dq_status AS INTEGER) >= 3 AND NOT COALESCE({RELIEF}, FALSE))
+))"""
 
 con.execute(f"""
     CREATE TABLE labels AS
     SELECT
         loan_id,
         vintage_year,
-        max(CASE WHEN {EVENT} THEN 1 ELSE 0 END) AS default_24m,
-        min(CASE WHEN {EVENT} THEN TRY_CAST(loan_age AS INTEGER) END) AS first_default_age,
+        max(CASE WHEN {ADJ_EVENT} THEN 1 ELSE 0 END) AS default_24m,
+        max(CASE WHEN {RAW_EVENT} THEN 1 ELSE 0 END) AS default_24m_raw,
+        min(CASE WHEN {ADJ_EVENT} THEN TRY_CAST(loan_age AS INTEGER) END) AS first_default_age,
         max(TRY_CAST(loan_age AS INTEGER)) AS months_observed,
-        max(CASE WHEN TRY_CAST(loan_age AS INTEGER) <= 24 AND mod_flag = 'Y'
-                 THEN 1 ELSE 0 END) AS ever_modified_24m
+        max(CASE WHEN {IN_WINDOW} AND mod_flag = 'Y' THEN 1 ELSE 0 END) AS ever_modified_24m,
+        max(CASE WHEN {IN_WINDOW} AND borrower_assistance_plan = 'F'
+                 THEN 1 ELSE 0 END) AS ever_forbearance_24m
     FROM perf
     GROUP BY loan_id, vintage_year
 """)
@@ -79,16 +89,18 @@ def show(title, sql):
 
 
 show(
-    "Default rate by vintage (24-month window)",
-    """SELECT vintage_year, count(*) AS loans, sum(default_24m) AS defaults,
-              round(100.0 * avg(default_24m), 2) AS default_rate_pct,
-              round(100.0 * avg(ever_modified_24m), 2) AS modified_pct,
-              round(avg(months_observed), 0) AS avg_months_observed
+    "Raw vs adjusted default rate by vintage (24-month window)",
+    """SELECT vintage_year, count(*) AS loans,
+              sum(default_24m_raw) AS raw_defaults,
+              round(100.0 * avg(default_24m_raw), 2) AS raw_rate_pct,
+              sum(default_24m) AS adj_defaults,
+              round(100.0 * avg(default_24m), 2) AS adj_rate_pct,
+              round(100.0 * avg(ever_forbearance_24m), 2) AS forbearance_pct
        FROM labels GROUP BY 1 ORDER BY 1""",
 )
 
 show(
-    "Default rate by credit score band (sanity check)",
+    "Adjusted default rate by credit score band (sanity check)",
     """SELECT CASE WHEN o.fico IS NULL THEN 'missing'
                     WHEN o.fico < 680 THEN '1: below 680'
                     WHEN o.fico < 720 THEN '2: 680-719'
