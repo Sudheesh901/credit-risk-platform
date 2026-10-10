@@ -73,6 +73,7 @@ python ingest/build_silver.py      # silver layer: typed features and default la
 python ingest/diagnose_default_timing.py   # timing check behind the label fix
 python ingest/check_quality.py     # 25 automated data-quality checks (exit code 1 on failure)
 python ingest/diagnose_quality_failures.py   # drill-down used to investigate check failures
+python ingest/make_athena_ddl.py <your-bucket-name>   # writes infra/athena/silver_tables.sql
 ```
 
 ## Tech stack

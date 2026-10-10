@@ -1,16 +1,17 @@
 # Project Status
 
-_Last updated: 2026-10-09 (about day 3 of a 6-week plan)._
+_Last updated: 2026-10-10 (day 4 of a 6-week plan; Week 1 complete, ahead of the Oct 14 target)._
 
 ## Summary
 
-Setup is complete, the bronze layer is built and profiled, and the silver layer now holds cleaned origination features and a validated 24-month default label. Twenty-five automated data-quality checks pass on the silver layer. The next work is loading the data into S3 and Athena to finish Week 1.
+Setup is complete, the bronze layer is built and profiled, and the silver layer now holds cleaned origination features and a validated 24-month default label. Twenty-five automated data-quality checks pass on the silver layer, and the data is stored in a private S3 bucket and queryable in Athena. Week 1 is complete. Week 2 starts with feature engineering and modelling.
 
 ## Done
 
 **Setup**
 - [x] Project folders, Python 3.11 environment (DuckDB, pandas, pyarrow), Git repo on GitHub
 - [x] AWS account secured: MFA on the root user, a separate admin user with MFA, budget alerts (monthly cost and zero-spend), working region us-east-1
+- [x] AWS CLI profile for local uploads, using access keys of the admin user (to be replaced with short-lived credentials in Week 3)
 
 **Week 1: data lake**
 - [x] Downloaded Freddie Mac SFLLD sample files and header files for vintages 2013-2022
@@ -21,6 +22,9 @@ Setup is complete, the bronze layer is built and profiled, and the silver layer 
 - [x] Found and fixed a calendar effect in the first default label (`ingest/diagnose_default_timing.py`)
 - [x] Wrote automated data-quality checks for the silver layer; all 25 pass (`ingest/check_quality.py`)
 - [x] Diagnosed the first check failures and corrected the rules (`ingest/diagnose_quality_failures.py`)
+- [x] Created a private S3 bucket (all public access blocked) and uploaded the silver Parquet data under `silver/orig` and `silver/labels`, partitioned by `vintage_year`
+- [x] Generated Athena table definitions from the Parquet schema, with partition projection (`ingest/make_athena_ddl.py`, `infra/athena/silver_tables.sql`)
+- [x] Created the Athena database `credit_risk` and ran a join query that returns the default rate by vintage (Week 1 definition of done)
 
 ## Data profiling findings (2013-2022 samples)
 
@@ -82,8 +86,10 @@ The first run of the checks passed 18 of 22 rules. The four failures were invest
 
 ## Next steps
 
-1. Upload to S3 and create Athena tables (Week 1 definition of done: an Athena query returns the default rate by vintage)
-2. Week 2: feature engineering (including the HARP decision and capping extreme values), scorecard vs LightGBM, calibration, SHAP
+1. Week 2: feature engineering, including the HARP decision and capping extreme values
+2. Weight-of-evidence scorecard (logistic regression) as the benchmark model
+3. LightGBM with monotonic constraints as the challenger
+4. Calibration, SHAP reason codes, cost-based approval threshold, draft model card
 
 ## Open items and risks
 
@@ -92,3 +98,4 @@ The first run of the checks passed 18 of 22 rules. The four failures were invest
 - Thin default counts in the samples: plan to retrain on full vintage files
 - Investigate why the 2022 vintage has higher defaults
 - Decide how to treat HARP loans in modelling (Week 2)
+- Replace the manual AWS setup (bucket, Athena tables) and the long-lived CLI keys with Terraform and short-lived credentials (Week 3)
